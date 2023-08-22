@@ -1,46 +1,45 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using System.Collections.Concurrent;
+﻿using Microsoft.AspNetCore.Mvc;
 
 namespace WebApplication1.Controllers
 {
-    [Route("api/comments")]
+    [Route("api/[controller]")]
     [ApiController]
     public class CommentController : ControllerBase
     {
-        private static ConcurrentDictionary<string, DateTime> RequestIds = new ConcurrentDictionary<string, DateTime>();
+        private static readonly Dictionary<Guid, Comment> commentStorage = new Dictionary<Guid, Comment>();
 
         [HttpPost]
-        public async Task<IActionResult> CreateComment([FromBody] string commentText)
+        public ActionResult<Guid> CreateComment([FromBody] Comment comment)
         {
-            string requestId = Guid.NewGuid().ToString();
-
-            // Эмулируем задержку перед записью в базу данных
-            await Sleep();
-
-            RequestIds.TryAdd(requestId, DateTime.UtcNow.AddSeconds(120));
+            Guid requestId = Guid.NewGuid();
+            Task.Run(async () =>
+            {
+                await Task.Delay(new Random().Next(10, 16) * 1000);
+                commentStorage.Add(requestId, comment);
+                comment.DateAdded = DateTime.Now;
+            });
 
             return Accepted(requestId);
         }
 
-        private static async Task Sleep()
+        [HttpGet("{id}")]
+        public ActionResult<Comment> GetComment(Guid id)
         {
-            Random random = new Random();
-            int delaySeconds = random.Next(10, 16);
-            await Task.Delay(delaySeconds * 1000);
-        }
-
-        [HttpGet("{requestId}")]
-        public IActionResult GetCommentStatus(string requestId)
-        {
-            if (RequestIds.TryGetValue(requestId, out DateTime expirationTime) && DateTime.UtcNow <= expirationTime)
+            if (commentStorage.TryGetValue(id, out Comment comment))
             {
-                return Accepted();
+                return comment;
             }
             else
             {
                 return NotFound();
             }
         }
+    }
+
+    public class Comment
+    {
+        public string Text { get; set; }
+        public DateTime DatePost { get; set; } = DateTime.Now;
+        public DateTime DateAdded { get; set; }
     }
 }

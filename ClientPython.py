@@ -1,38 +1,43 @@
 import requests
 import time
-import random
+import json
+import urllib3
+from uuid import UUID
 
-def create_comment(comment_text):
-    response = requests.post("http://localhost:5230/api/comments", json=comment_text, verify=False)
-    return response.text
+def create_comment(client, text):
+    response = client.post("https://localhost:7234/api/comment", json={"Text": text})
+    return response.json()
 
-def get_comment_status(request_id):
-    response = requests.get(f"http://localhost:5230/api/comments/{request_id}")
-    return response.status_code
+def get_comment(client, request_id):
+    response = client.get(f"https://localhost:7234/api/comment/{request_id}")
+    if response.status_code == 200:
+        return response.json()
+    return None
 
 def main():
-    comments = ["Great post!", "Thanks for sharing.", "Interesting topic."]
-    
-    for comment_text in comments:
-        request_id = create_comment(comment_text)
-        print(f"Comment '{comment_text}' sent. Request ID: {request_id}")
-    
-    while comments:
-        comment_text = comments.pop(0)
-        request_id = create_comment(comment_text)
-        print(f"Comment '{comment_text}' sent. Request ID: {request_id}")
-        time.sleep(1)
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    client = requests.Session()
+    client.verify = False
+    requests_id_list = []
 
-    print("Waiting for comments to be processed...")
-    while comments:
-        request_id = comments[0]
-        status_code = get_comment_status(request_id)
-        if status_code == 202:
-            print(f"Comment with Request ID {request_id} has been processed.")
-            comments.pop(0)
-        else:
-            print(f"Comment with Request ID {request_id} is still pending.")
-        time.sleep(1)
+    for i in range(10):
+        comment = f"Comment {i + 1}"
+        request_id = create_comment(client, comment)
+        requests_id_list.append(request_id)
+        print(f"Comment '{comment}' sent with request ID: {request_id}")
+
+    while True:
+        if requests_id_list.__len__() == 0:
+            break
+
+        comment_data = None
+        for id in requests_id_list:
+            comment_data = get_comment(client, id)
+            if comment_data:
+                print(f"Received comment: {comment_data.get('text', 'N/A')}\n\tID: {request_id}\n\ttime post: {comment_data.get('datePost', 'N/A')}\n\ttime added: {comment_data.get('dateAdded', 'N/A')}")
+                requests_id_list.remove(id)
+            
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()
